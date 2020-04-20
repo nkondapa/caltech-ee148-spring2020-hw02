@@ -1,0 +1,10 @@
+*.*
+!.gitattributes
+!.gitignore
+!README.md
+!LICENSE
+!.gitkeep
+!*.py
+!*.ipynb
+!pip_requirements.txt
+!/kernels/*
