@@ -55,7 +55,14 @@ def generate_gaussian_kernel(s=3, sigma=1.0):
     d = np.sqrt(x * x + y * y)
     mu = 0.0
     g = np.exp(-((d - mu) ** 2 / (2.0 * sigma ** 2)))
+    g = g/np.sum(g)
     return g
+
+
+def generate_uniform_kernel(s=3):
+    mat = np.ones(shape=(s, s))
+    mat = mat/s**2
+    return mat
 
 
 def delete_directory_recursively(path):

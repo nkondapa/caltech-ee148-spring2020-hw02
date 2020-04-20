@@ -27,7 +27,7 @@ def rank_threshold_convolved_image(img_arr_orig, rank=20, mode='both'):
 
     if mode == 'both':
         img_arr[img_arr < threshold] = 0
-        img_arr[img_arr > threshold] = 1
+        img_arr[img_arr >= threshold] = 1
     elif mode == 'up':
         img_arr[img_arr > threshold] = 1
     elif mode == 'down':

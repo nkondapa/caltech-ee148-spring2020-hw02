@@ -41,16 +41,27 @@ def search_for_kernel(img, kernel_save_path):
     box_size = 6
     boxes = []
 
-    for i, event in enumerate(events):
-        x = int(event.xdata)
-        y = int(event.ydata)
-        print(x, y)
-        print(img.getpixel(xy=(x, y)))
-        box = im_arr[(y-box_size):(y+box_size+1), (x-box_size):(x+box_size+1), :]
-        boxes.append(box)
-        plt.imshow(box)
-        plt.show()
-        save_kernels(box, kernel_save_path, i + base_num)
+    tl_point = True
+    count = 0
+    for event in events:
+        if event.button != 3:
+            continue
+        if tl_point:
+            tly = int(event.xdata)
+            tlx = int(event.ydata)
+        # print(img.getpixel(xy=(x, y)))
+        if not tl_point:
+            bry = int(event.xdata)
+            brx = int(event.ydata)
+            box = im_arr[tlx:brx, tly:bry, :]
+            boxes.append(box)
+            plt.imshow(box)
+            save_kernels(box, kernel_save_path, count + base_num)
+            plt.savefig(kernel_save_path + '/kernel=' + str(count + base_num))
+            plt.imshow(box)
+            plt.show()
+            count += 1
+        tl_point = not tl_point
 
     # np.stack(boxes, axis=3)
     # box_stack = np.stack(boxes, axis=3)
@@ -101,12 +112,12 @@ def save_kernels(box, kernel_save_path, i):
 
 path = '../data/hw01_preds/preds.json'
 kernel_path = '../data/kernels'
-image_base_path = '../data/RedLights2011_Medium'
+image_base_path = '../data/RedLights2011_tiny'
 
 
 image_paths = sorted(glob.glob(image_base_path + '/*'))
 
-image_path = image_paths[9]
+image_path = image_paths[0]
 img = utilities.load_image(image_path)
 img_arr = utilities.image_to_array(img)
 search_for_kernel(img, kernel_path)

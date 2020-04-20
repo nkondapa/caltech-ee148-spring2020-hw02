@@ -82,3 +82,120 @@ def targeted_filtering(I, points, kernels):
         heatmaps.append(heatmap)
 
     return heatmaps
+
+
+def smooth_heatmap(heatmap, kernel):
+
+    I = heatmap
+    T = kernel
+
+    if len(I.shape) != 3:
+        I = np.expand_dims(I, axis=2)
+    (n_rows, n_cols, n_channels) = np.shape(I)
+
+    if len(T.shape) == 2 and n_channels != 1:
+        (Trows, Tcols) = np.shape(T)
+        T = np.expand_dims(T, axis=2)
+        repT = np.tile(T, reps=3)
+    elif len(T.shape) == 3 and n_channels == 1:
+        T = np.mean(T, axis=2)
+        (Trows, Tcols) = np.shape(T)
+        repT = T
+    elif len(T.shape) == 2 and n_channels == 1:
+        (Trows, Tcols) = np.shape(T)
+        repT = T
+    else:
+        (Trows, Tcols, Tchannels) = np.shape(T)
+        repT = T
+
+    tr_Trows = int(Trows/2)
+    br_Trows = Trows - tr_Trows
+    lc_Tcols = int(Tcols / 2)
+    rc_Tcols = Tcols - lc_Tcols
+
+    # heatmap = np.random.random((n_rows, n_cols))
+    heatmap = np.zeros(shape=(n_rows, n_cols))
+    stride = 1
+    for i in range(0, n_rows, stride):
+        for j in range(0, n_cols, stride):
+            padded_patch = np.zeros(shape=(T.shape[0], T.shape[1], n_channels))
+            tr = max(0, i - tr_Trows)
+            br = min(n_rows, i + br_Trows)
+            lc = max(0, j - lc_Tcols)
+            rc = min(n_cols, j + rc_Tcols)
+            offsetr = abs(i - tr_Trows - tr) + abs(i + br_Trows - br)
+            offsetc = abs(j - lc_Tcols - lc) + abs(j + rc_Tcols - rc)
+            patch = I[tr:br, lc:rc, :]
+            if patch.shape != T.shape:
+                padded_patch[offsetr:, offsetc:, :] = patch
+                patch = padded_patch
+
+            # patch = patch - np.mean(patch[patch > 0])
+            # patch[patch < 0] = 0
+            # heatmap[i, j] = np.max(patch) - np.mean(patch[patch > 0])
+            heatmap[i, j] = np.sum(patch * kernel)
+
+    return heatmap
+
+
+def neighbor_max_smooth_heatmap(heatmap, kernel):
+
+    I = heatmap
+    T = kernel
+
+    if len(I.shape) != 3:
+        I = np.expand_dims(I, axis=2)
+    (n_rows, n_cols, n_channels) = np.shape(I)
+
+    if len(T.shape) == 2 and n_channels != 1:
+        (Trows, Tcols) = np.shape(T)
+        T = np.expand_dims(T, axis=2)
+        repT = np.tile(T, reps=3)
+    elif len(T.shape) == 3 and n_channels == 1:
+        T = np.mean(T, axis=2)
+        (Trows, Tcols) = np.shape(T)
+        repT = T
+    elif len(T.shape) == 2 and n_channels == 1:
+        (Trows, Tcols) = np.shape(T)
+        repT = T
+    else:
+        (Trows, Tcols, Tchannels) = np.shape(T)
+        repT = T
+
+    tr_Trows = int(Trows/2)
+    br_Trows = Trows - tr_Trows
+    lc_Tcols = int(Tcols / 2)
+    rc_Tcols = Tcols - lc_Tcols
+
+    # heatmap = np.random.random((n_rows, n_cols))
+    heatmap = np.zeros(shape=(n_rows, n_cols))
+    stride = 1
+    for i in range(0, n_rows, stride):
+        for j in range(0, n_cols, stride):
+            padded_patch = np.zeros(shape=(T.shape[0], T.shape[1], n_channels))
+            tr = max(0, i - tr_Trows)
+            br = min(n_rows, i + br_Trows)
+            lc = max(0, j - lc_Tcols)
+            rc = min(n_cols, j + rc_Tcols)
+            offsetr = abs(i - tr_Trows - tr) + abs(i + br_Trows - br)
+            offsetc = abs(j - lc_Tcols - lc) + abs(j + rc_Tcols - rc)
+            patch = I[tr:br, lc:rc, :]
+            if patch.shape != T.shape:
+                padded_patch[offsetr:, offsetc:, :] = patch
+                patch = padded_patch
+
+            # patch = patch - np.mean(patch[patch > 0])
+            # patch[patch < 0] = 0
+            # heatmap[i, j] = np.max(patch) - np.mean(patch[patch > 0])
+            heatmap[i, j] = np.max(patch)
+
+    return heatmap
+
+def smooth_heatmaps(heatmaps, kernel):
+
+    heatmaps_out = []
+    for i, heatmap in enumerate(heatmaps):
+        print(i)
+        heatmaps_out.append(smooth_heatmap(heatmap, kernel))
+
+    return heatmaps_out

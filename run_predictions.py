@@ -19,6 +19,10 @@ def compute_convolution(I, T, stride=None, img_name=''):
     '''
     BEGIN YOUR CODE
     '''
+
+    if np.max(I) > 1:
+        I = I/255
+
     if len(I.shape) != 3:
         I = np.expand_dims(I, axis=2)
     (n_rows, n_cols, n_channels) = np.shape(I)
@@ -35,6 +39,12 @@ def compute_convolution(I, T, stride=None, img_name=''):
         (Trows, Tcols, Tchannels) = np.shape(T)
         repT = T
 
+    T_norm = (1 / np.linalg.norm(repT.flatten()))
+    avg_repT = np.mean(repT, axis=2)
+    x, y = np.where(repT[:, :, 0] == np.max(repT[:, :, 0]))
+    hot_x = round(np.mean(x).item())
+    hot_y = round(np.mean(y).item())
+
     tr_Trows = int(Trows/2)
     br_Trows = Trows - tr_Trows
     lc_Tcols = int(Tcols / 2)
@@ -42,6 +52,8 @@ def compute_convolution(I, T, stride=None, img_name=''):
 
     # heatmap = np.random.random((n_rows, n_cols))
     heatmap = np.zeros(shape=(n_rows, n_cols))
+    pixel_dist_diag_score = np.zeros(shape=(n_rows, n_cols))
+    norm_matrix = np.zeros(shape=(n_rows, n_cols))
     if stride is None:
         stride = 1
     for i in range(0, n_rows, stride):
@@ -55,15 +67,26 @@ def compute_convolution(I, T, stride=None, img_name=''):
             offsetc = abs(j - lc_Tcols - lc) + abs(j + rc_Tcols - rc)
             patch = I[tr:br, lc:rc, :]
             # print(i, j)
-            if patch.shape != (8, 6, 3):
+
+            if patch.shape != T.shape:
                 # print(i, j, offsetr, offsetc)
                 # print(patch.shape)
                 padded_patch[offsetr:, offsetc:, :] = patch
                 patch = padded_patch
 
-            patch_norm = (1 / np.linalg.norm(patch.flatten()))
-            T_norm = (1 / np.linalg.norm(repT.flatten()))
+            patch_norm_denom = np.linalg.norm(patch.flatten())
+            patch_norm = (1 / patch_norm_denom)
             heatmap[i, j] = np.dot(patch.flatten(), repT.flatten()) * patch_norm * T_norm
+            norm_matrix[i, j] = patch_norm_denom
+            # patch_diag = np.diagonal(patch)
+            pixel_dist_diag_score[i, j] = 1 - np.mean(abs(repT[hot_x, hot_y] - patch[hot_x, hot_y]))
+            # if pixel_dist_diag_score[i, j] > 0.7:
+            #     # print(i, j)
+            #     print()
+            #     plt.subplot(1, 2, 1)
+            #     plt.imshow(T*T_norm)
+            #     plt.subplot(1, 2, 2)
+            #     plt.imshow(patch*patch_norm)
             # for k in range(n_channels):
             #
             #     np.sum(patch * T)
@@ -82,7 +105,7 @@ def compute_convolution(I, T, stride=None, img_name=''):
     END YOUR CODE
     '''
 
-    return heatmap
+    return heatmap, pixel_dist_diag_score, norm_matrix
 
 
 def predict_boxes(heatmap):
@@ -152,19 +175,75 @@ def detect_red_light_mf(I, name=''):
     template_width = 6
     import utilities
     import ip_algorithms as ipa
+    import time
+    import pickle as pkl
     # You may use multiple stages and combine the results
     # T = np.random.random((template_height, template_width))
     # T = utilities.generate_gaussian_kernel(s=6, sigma=1.5)
-    T = utilities.load_kernel('2', '../data/kernels/')
+    num_kernels = 4
+    T_list = []
+    for i in range(num_kernels):
+        T_list.append(utilities.load_kernel(str(i), '../data/kernels/'))
+
+    # rough search for traffic lights
+    heatmaps = []
+    norm_matrices = []
+    pixel_dist_diag_scores = []
+    st = time.time()
+    load = True
+    if not load:
+        for i in range(len(T_list)):
+            print(i)
+            heatmap, pixel_dist_diag_score, norm_matrix = compute_convolution(I, T_list[i], stride=2)
+            heatmaps.append(heatmap)
+            norm_matrices.append(norm_matrix)
+            pixel_dist_diag_scores.append(pixel_dist_diag_score)
+        with open('../data/heatmaps/temp.pkl', 'wb') as f:
+            pkl.dump([heatmaps, pixel_dist_diag_scores, norm_matrices], f)
+    else:
+        with open('../data/heatmaps/temp.pkl', 'rb') as f:
+            # pkl.dump(heatmaps, f)
+            heatmaps, pixel_dist_diag_scores, norm_matrices = pkl.load(f)
+    print(time.time() - st)
+
+
+    # smooth heatmaps
+    st = time.time()
+    # heatmaps2 = []
+    # for heatmap in heatmaps:
+    #     # heatmap = heatmap - np.mean(heatmap[heatmap > 0])
+    #     # heatmap[heatmap < 0] = 0
+    #     thr = np.mean(heatmap[heatmap > np.mean(heatmap[heatmap > 0])])
+    #     print(thr)
+    #     heatmaps2.append(postprocessing.threshold_convolved_image(heatmap, thr, 'down'))
+    # heatmaps = ipa.smooth_heatmaps(heatmaps, utilities.generate_gaussian_kernel(s=4, sigma=1))
+    for i in range(len(T_list)):
+        # plt.subplot(1, 2, 1)
+        # plt.imshow(heatmaps[i])
+        # plt.subplot(1, 2, 2)
+        # plt.imshow(norm_matrices[i])
+        # plt.show()
+        # plt.imshow(heatmaps[i] * norm_matrices[i])
+        # plt.show()
+        plt.imshow(heatmaps[i])
+        plt.show()
+        plt.imshow(pixel_dist_diag_scores[i])
+        plt.show()
+    avg_heatmap = np.mean(heatmaps, axis=0)
+    print(time.time() - st)
+    plt.imshow(avg_heatmap)
+    plt.show()
+    print()
+
     # heatmap1 = compute_convolution(I, T, stride=1)
     # np.save('../data/heatmaps/' + name.rstrip('.jpg'), heatmap1)
-    heatmap1 = np.load('../data/heatmaps/' + name.rstrip('.jpg') + '.npy')
-    # theatmap1 = postprocessing.threshold_convolved_image(heatmap1, 0.75, 'down')
-    theatmap1 = postprocessing.rank_threshold_convolved_image(heatmap1, 20, 'down')
-    groups, group_centers, _ = postprocessing.group_pixels(img_arr=theatmap1)
-    # print(group_centers)
-
-    heatmaps = ipa.targeted_filtering(I, group_centers, [T])
+    # heatmap1 = np.load('../data/heatmaps/' + name.rstrip('.jpg') + '.npy')
+    # # theatmap1 = postprocessing.threshold_convolved_image(heatmap1, 0.75, 'down')
+    # theatmap1 = postprocessing.rank_threshold_convolved_image(heatmap1, 20, 'down')
+    # groups, group_centers, _ = postprocessing.group_pixels(img_arr=theatmap1)
+    # # print(group_centers)
+    #
+    # heatmaps = ipa.targeted_filtering(I, group_centers, [T])
     # plt.imshow(heatmaps[0])
     # plt.show()
     print()
@@ -184,17 +263,17 @@ def detect_red_light_mf(I, name=''):
     #     figManager.full_screen_toggle()
     #
     #     plt.show()
-    output = predict_boxes(heatmaps[0])
-
+    # output = predict_boxes(heatmaps[0])
+    output = []
     '''
     END YOUR CODE
     '''
-
-    for i in range(len(output)):
-        assert len(output[i]) == 5
-        assert (output[i][4] >= 0.0) and (output[i][4] <= 1.0)
-
-    return output
+    #
+    # for i in range(len(output)):
+    #     assert len(output[i]) == 5
+    #     assert (output[i][4] >= 0.0) and (output[i][4] <= 1.0)
+    #
+    # return output
 
 # Note that you are not allowed to use test data for training.
 # set the path to the downloaded data:
@@ -217,8 +296,8 @@ Make predictions on the training set.
 '''
 preds_train = {}
 for i in range(len(file_names_train)):
-    # if i not in [2]:
-    #     continue
+    if i not in [3]:
+        continue
 
     print(file_names_train[i])
     # read image using PIL:
