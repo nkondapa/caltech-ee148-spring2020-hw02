@@ -16,7 +16,9 @@ def image_to_array(img):
 def load_kernel(id, base_kernel_path):
     path = base_kernel_path + '/kernel=' + str(id) + '.npy'
     kernel = np.load(path)
-    kernel = np.array(kernel, dtype=np.float32) / 255
+    kernel = np.array(kernel, dtype=np.float32)
+    if np.max(kernel) > 1:
+        kernel /= 255
 
     return kernel
 

@@ -4,7 +4,7 @@ import os
 
 np.random.seed(2020) # to ensure you always get the same train/test split
 
-data_path = '../data/RedLights2011_tiny'
+data_path = '../data/RedLights2011_Medium'
 gts_path = '../data/hw02_annotations'
 split_path = '../data/hw02_splits'
 preds_path = '../data/hw02_preds'

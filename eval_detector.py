@@ -78,6 +78,13 @@ def compute_counts(preds, gts, iou_thr=0.5, conf_thr=0.5):
         # if pred_file != 'RL-288.jpg':
         #     continue
         gt = gts[pred_file]
+        cFN_check = [1] * len(gt)
+        if not pred:
+            TP += 0
+            FP += 0
+            FN += sum(cFN_check)
+            continue
+
         cP = np.sum(np.array(pred)[:, 4] >= conf_thr)
         available_points = set(range(len(pred)))
 
@@ -105,7 +112,6 @@ def compute_counts(preds, gts, iou_thr=0.5, conf_thr=0.5):
                 if iou > iou_thr:
                     iou_matrix[i, j] = iou
 
-        cFN_check = [1] * len(gt)
         cTP = 0
         print(available_points)
         while np.sum(iou_matrix) != 0:
@@ -170,7 +176,14 @@ if done_tweaking:
 # The code below gives an example on the training set for one IoU threshold.
 
 # using (ascending) list of confidence scores as thresholds
-confidence_thrs = np.sort(np.concatenate([np.array(preds_train[fname], dtype=float)[:, 4] for fname in preds_train]))
+pred_list = []
+for fname in preds_train:
+    print(preds_train[fname])
+    if not preds_train[fname]:
+        continue
+    pred_list.append(np.array(preds_train[fname], dtype=float)[:, 4])
+
+confidence_thrs = np.sort(np.concatenate(pred_list))
 reduced_confidence_thrs = np.unique(np.around(confidence_thrs, decimals=5))
 tp_train = np.zeros(len(confidence_thrs))
 fp_train = np.zeros(len(confidence_thrs))

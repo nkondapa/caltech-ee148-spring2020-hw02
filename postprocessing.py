@@ -35,6 +35,7 @@ def rank_threshold_convolved_image(img_arr_orig, rank=20, mode='both'):
 
     return img_arr
 
+
 def group_pixels(img_arr):
 
     x, y = np.where(img_arr > 0)
@@ -45,7 +46,7 @@ def group_pixels(img_arr):
     groups = []
     group_centers = []
     num_items = 0
-    print('grouping...')
+    # print('grouping...')
     while len(points) > 0:
         sub_x = []
         sub_y = []
@@ -97,9 +98,78 @@ def groups_to_bounding_boxes(groups, img_arr=None):
             heat_sum += img_arr[p]
         score = heat_sum / len(group)
         scores.append(score)
-        print(most_top, most_left, most_bottom, most_right)
+        print(most_top, most_left, most_bottom, most_right, score)
         bounding_box = [int(most_top), int(most_left), int(most_bottom), int(most_right)]
         bounding_boxes.append(bounding_box)
         combined.append([int(most_top), int(most_left), int(most_bottom), int(most_right), score])
 
     return bounding_boxes, scores, combined
+
+
+def group_adjust_to_kernel_coords(group, kernel_coords):
+
+    x, y = kernel_coords
+
+    group_adjusted = set()
+    for p in group:
+        group_adjusted.add((p[0] - x, p[1]-y))
+
+    return group_adjusted
+
+
+def match_group_to_kernel(groups, kernel_sizes):
+
+    group_sizes = [len(group) for group in groups]
+
+    kernel_inds = []
+    for gs in group_sizes:
+        kernel_inds.append(np.argmin(abs(gs - np.array(kernel_sizes))))
+
+    return kernel_inds
+
+
+def group_center_to_pixel_group(group_center, T, img_size):
+
+    (n_rows, n_cols, n_channels) = img_size
+
+    if len(T.shape) == 2 and n_channels != 1:
+        (Trows, Tcols) = np.shape(T)
+        T = np.expand_dims(T, axis=2)
+        repT = np.tile(T, reps=3)
+    elif len(T.shape) == 3 and n_channels == 1:
+        T = np.mean(T, axis=2)
+        (Trows, Tcols) = np.shape(T)
+        repT = T
+    else:
+        (Trows, Tcols, Tchannels) = np.shape(T)
+        repT = T
+
+    T_norm = (1 / np.linalg.norm(repT.flatten()))
+    avg_repT = np.mean(repT, axis=2)
+    x, y = np.where(repT[:, :, 0] == np.max(repT[:, :, 0]))
+    hot_x = round(np.mean(x).item())
+    hot_y = round(np.mean(y).item())
+
+    tr_Trows = int(Trows/2)
+    br_Trows = Trows - tr_Trows
+    lc_Tcols = int(Tcols / 2)
+    rc_Tcols = Tcols - lc_Tcols
+
+    tr = max(0, group_center[0] - tr_Trows)
+    br = min(n_rows, group_center[0] + br_Trows)
+    lc = max(0, group_center[1] - lc_Tcols)
+    rc = min(n_cols, group_center[1] + rc_Tcols)
+    offsetr = abs(group_center[0] - tr_Trows - tr) + abs(group_center[0] + br_Trows - br)
+    offsetc = abs(group_center[1] - lc_Tcols - lc) + abs(group_center[1] + rc_Tcols - rc)
+
+    pixel_group = set()
+    for i in range(tr, br+1):
+        if i < 0 or i >= img_size[0]:
+            continue
+        for j in range(lc, rc+1):
+            if j < 0 or j >= img_size[1]:
+                continue
+            pixel_group.add((i, j))
+
+    return pixel_group
+

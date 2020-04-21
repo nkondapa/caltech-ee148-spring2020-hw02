@@ -3,10 +3,13 @@ import numpy as np
 import json
 from PIL import Image
 import matplotlib.pyplot as plt
+import preprocessing
+import utilities
 import postprocessing
+import ip_algorithms as ipa
 
 
-def compute_convolution(I, T, stride=None, img_name=''):
+def compute_convolution(I, T, stride=None, pixel_group=None, img_name=''):
     '''
     This function takes an image <I> and a template <T> (both numpy arrays) 
     and returns a heatmap where each grid represents the output produced by 
@@ -39,25 +42,45 @@ def compute_convolution(I, T, stride=None, img_name=''):
         (Trows, Tcols, Tchannels) = np.shape(T)
         repT = T
 
+    # repT = repT/np.sum(repT)
+    avg_repT = np.mean(repT, axis=(0, 1))
+    center_repT = repT - avg_repT
+    norm_repT = np.linalg.norm(center_repT, axis=(0, 1))
+    # norm_repT = np.std(center_repT, axis=(0, 1))
+    cnT = center_repT / norm_repT
     T_norm = (1 / np.linalg.norm(repT.flatten()))
-    avg_repT = np.mean(repT, axis=2)
+    std_repT = np.std(repT)
     x, y = np.where(repT[:, :, 0] == np.max(repT[:, :, 0]))
     hot_x = round(np.mean(x).item())
     hot_y = round(np.mean(y).item())
 
-    tr_Trows = int(Trows/2)
+    tr_Trows = hot_x
     br_Trows = Trows - tr_Trows
-    lc_Tcols = int(Tcols / 2)
+    lc_Tcols = hot_y
     rc_Tcols = Tcols - lc_Tcols
-
-    # heatmap = np.random.random((n_rows, n_cols))
+    # tr_Trows = int(Trows/2)
+    # br_Trows = Trows - tr_Trows
+    # lc_Tcols = int(Tcols / 2)
+    # rc_Tcols = Tcols - lc_Tcols
     heatmap = np.zeros(shape=(n_rows, n_cols))
-    pixel_dist_diag_score = np.zeros(shape=(n_rows, n_cols))
-    norm_matrix = np.zeros(shape=(n_rows, n_cols))
+
     if stride is None:
         stride = 1
-    for i in range(0, n_rows, stride):
-        for j in range(0, n_cols, stride):
+
+    xvals = range(0, n_rows, stride)
+    yvals = range(0, n_cols, stride)
+    targeted = False
+    yvals_master = None
+    if pixel_group is not None:
+        targeted = True
+        xvals, yvals_master = zip(*pixel_group)
+
+    xval_count = 0
+    for i in xvals:
+        if targeted:
+            yvals = [yvals_master[xval_count]]
+            xval_count += 1
+        for j in yvals:
             padded_patch = np.zeros(shape=(T.shape[0], T.shape[1], n_channels))
             tr = max(0, i - tr_Trows)
             br = min(n_rows, i + br_Trows)
@@ -66,46 +89,37 @@ def compute_convolution(I, T, stride=None, img_name=''):
             offsetr = abs(i - tr_Trows - tr) + abs(i + br_Trows - br)
             offsetc = abs(j - lc_Tcols - lc) + abs(j + rc_Tcols - rc)
             patch = I[tr:br, lc:rc, :]
-            # print(i, j)
 
             if patch.shape != T.shape:
-                # print(i, j, offsetr, offsetc)
-                # print(patch.shape)
                 padded_patch[offsetr:, offsetc:, :] = patch
                 patch = padded_patch
 
-            patch_norm_denom = np.linalg.norm(patch.flatten())
-            patch_norm = (1 / patch_norm_denom)
-            heatmap[i, j] = np.dot(patch.flatten(), repT.flatten()) * patch_norm * T_norm
-            norm_matrix[i, j] = patch_norm_denom
-            # patch_diag = np.diagonal(patch)
-            pixel_dist_diag_score[i, j] = 1 - np.mean(abs(repT[hot_x, hot_y] - patch[hot_x, hot_y]))
-            # if pixel_dist_diag_score[i, j] > 0.7:
-            #     # print(i, j)
-            #     print()
-            #     plt.subplot(1, 2, 1)
-            #     plt.imshow(T*T_norm)
-            #     plt.subplot(1, 2, 2)
-            #     plt.imshow(patch*patch_norm)
-            # for k in range(n_channels):
+            # patch_norm_denom = np.linalg.norm(patch.flatten())
+            # patch_norm = (1 / patch_norm_denom)
+            # heatmap[i, j] = np.dot(patch.flatten(), repT.flatten()) * patch_norm * T_norm
+            center_patch = patch - np.mean(patch, axis=(0, 1))
+            norm_patch = np.linalg.norm(center_patch, axis=(0, 1))
+            # norm_patch = np.std(center_patch, axis=(0, 1))
+            cnp = center_patch/norm_patch
+            for k in range(3):
+                heatmap[i, j] += (np.dot(cnT[:, :, k].flatten(), cnp[:, :, k].flatten()))/3
+            # heatmap[i, j] =
+            #heatmap[i, j] = np.dot(patch.flatten(), repT.flatten())
             #
-            #     np.sum(patch * T)
-            #     heatmap[]
-            #     print(i, j, k)
-    #
-    # plt.subplot(1, 3, 1)
-    # plt.imshow(T)
-    # plt.subplot(1, 3, 2)
-    # plt.imshow(np.squeeze(I))
-    # plt.subplot(1, 3, 3)
-    # plt.imshow(heatmap)
-    # plt.colorbar()
-    # plt.show()
+            # if heatmap[i, j] > 0.63:
+            #     print(i, j, heatmap[i, j])
+            #     plt.subplot(131)
+            #     plt.imshow(patch)
+            #     plt.subplot(132)
+            #     plt.imshow(T)
+            #     plt.subplot(133)
+            #     plt.imshow(I)
+            #     plt.show()
     '''
     END YOUR CODE
     '''
 
-    return heatmap, pixel_dist_diag_score, norm_matrix
+    return heatmap
 
 
 def predict_boxes(heatmap):
@@ -152,7 +166,7 @@ def predict_boxes(heatmap):
     return output
 
 
-def detect_red_light_mf(I, name=''):
+def detect_red_light_mf(I, img=None, name=''):
     '''
     This function takes a numpy array <I> and returns a list <output>.
     The length of <output> is the number of bounding boxes predicted for <I>. 
@@ -173,111 +187,81 @@ def detect_red_light_mf(I, name=''):
     '''
     template_height = 8
     template_width = 6
-    import utilities
-    import ip_algorithms as ipa
     import time
     import pickle as pkl
     # You may use multiple stages and combine the results
-    # T = np.random.random((template_height, template_width))
-    # T = utilities.generate_gaussian_kernel(s=6, sigma=1.5)
-    num_kernels = 4
-    T_list = []
-    for i in range(num_kernels):
-        T_list.append(utilities.load_kernel(str(i), '../data/kernels/'))
-
-    # rough search for traffic lights
-    heatmaps = []
-    norm_matrices = []
-    pixel_dist_diag_scores = []
-    st = time.time()
-    load = True
-    if not load:
-        for i in range(len(T_list)):
-            print(i)
-            heatmap, pixel_dist_diag_score, norm_matrix = compute_convolution(I, T_list[i], stride=2)
-            heatmaps.append(heatmap)
-            norm_matrices.append(norm_matrix)
-            pixel_dist_diag_scores.append(pixel_dist_diag_score)
-        with open('../data/heatmaps/temp.pkl', 'wb') as f:
-            pkl.dump([heatmaps, pixel_dist_diag_scores, norm_matrices], f)
-    else:
-        with open('../data/heatmaps/temp.pkl', 'rb') as f:
-            # pkl.dump(heatmaps, f)
-            heatmaps, pixel_dist_diag_scores, norm_matrices = pkl.load(f)
-    print(time.time() - st)
-
-
-    # smooth heatmaps
-    st = time.time()
-    # heatmaps2 = []
-    # for heatmap in heatmaps:
-    #     # heatmap = heatmap - np.mean(heatmap[heatmap > 0])
-    #     # heatmap[heatmap < 0] = 0
-    #     thr = np.mean(heatmap[heatmap > np.mean(heatmap[heatmap > 0])])
-    #     print(thr)
-    #     heatmaps2.append(postprocessing.threshold_convolved_image(heatmap, thr, 'down'))
-    # heatmaps = ipa.smooth_heatmaps(heatmaps, utilities.generate_gaussian_kernel(s=4, sigma=1))
-    for i in range(len(T_list)):
-        # plt.subplot(1, 2, 1)
-        # plt.imshow(heatmaps[i])
-        # plt.subplot(1, 2, 2)
-        # plt.imshow(norm_matrices[i])
+    num_kernels = 6
+    kernel_list = []
+    kernel_sizes = []
+    for i in range(6):
+        kernel_list.append(utilities.load_kernel(str(i), '../data/kernels/'))
+        # plt.imshow(kernel_list[-1])
         # plt.show()
-        # plt.imshow(heatmaps[i] * norm_matrices[i])
-        # plt.show()
-        plt.imshow(heatmaps[i])
-        plt.show()
-        plt.imshow(pixel_dist_diag_scores[i])
-        plt.show()
-    avg_heatmap = np.mean(heatmaps, axis=0)
-    print(time.time() - st)
-    plt.imshow(avg_heatmap)
-    plt.show()
-    print()
+        kernel_sizes.append(preprocessing.get_patch_hot_spot_size(kernel_list[-1]))
+    rgb_pixel_array = np.load('../data/red_light_pixels/rgb_pixel_array.npy')
 
-    # heatmap1 = compute_convolution(I, T, stride=1)
-    # np.save('../data/heatmaps/' + name.rstrip('.jpg'), heatmap1)
-    # heatmap1 = np.load('../data/heatmaps/' + name.rstrip('.jpg') + '.npy')
-    # # theatmap1 = postprocessing.threshold_convolved_image(heatmap1, 0.75, 'down')
-    # theatmap1 = postprocessing.rank_threshold_convolved_image(heatmap1, 20, 'down')
-    # groups, group_centers, _ = postprocessing.group_pixels(img_arr=theatmap1)
-    # # print(group_centers)
-    #
-    # heatmaps = ipa.targeted_filtering(I, group_centers, [T])
-    # plt.imshow(heatmaps[0])
+    map_mih = preprocessing.color_match_red_lights(I, rgb_pixel_array, stride=2)
+    thresholded_mih_map = postprocessing.threshold_convolved_image(map_mih, 0.94, mode='down')
+    smoothed_thresholded_mih_map = ipa.neighbor_max_smooth_heatmap(thresholded_mih_map, np.zeros(shape=(5, 5)))
+    # plt.subplot(121)
+    # plt.imshow(I)
+    # plt.subplot(122)
+    # plt.imshow(map_mih)
     # plt.show()
-    print()
-    # for thr in range(0, 20):
-    #     theatmap1 = postprocessing.threshold_convolved_image(heatmap1, thr/20, 'down')
-    #     plt.subplot(1, 3, 1)
-    #     plt.imshow(heatmap1)
-    #     plt.subplot(1, 3, 2)
-    #     plt.imshow(theatmap1)
-    #     # plt.subplot(1, 4, 2)
-    #     # plt.imshow(heatmap2)
-    #     # plt.subplot(1, 4, 3)
-    #     # plt.imshow(theatmap2)
-    #     plt.subplot(1, 3, 3)
-    #     plt.imshow(I)
-    #     figManager = plt.get_current_fig_manager()
-    #     figManager.full_screen_toggle()
-    #
-    #     plt.show()
-    # output = predict_boxes(heatmaps[0])
+
+    # plt.subplot(121)
+    # plt.imshow(thresholded_mih_map)
+    # plt.subplot(122)
+    # plt.imshow(smoothed_thresholded_mih_map)
+    # plt.show()
+    groups, group_centers, pixels = postprocessing.group_pixels(smoothed_thresholded_mih_map)
+    kernel_inds = postprocessing.match_group_to_kernel(groups, kernel_sizes)
+
+    heatmap = np.zeros(shape=map_mih.shape)
+    heatmaps = []
+
+    for kernel in kernel_list:
+        kernel_heatmaps = []
+        for i, group in enumerate(groups):
+            # kernel = kernel_list[kernel_inds[i]]
+            group = postprocessing.group_center_to_pixel_group(group_centers[i], kernel, img_size=I.shape)
+            hmap = compute_convolution(I, kernel, stride=1, pixel_group=group)
+            kernel_heatmaps.append(hmap)
+            # plt.imshow(heatmaps[-1])
+            # plt.show()
+        kernel_heatmap = np.max(kernel_heatmaps, axis=0)
+        plt.imshow(kernel_heatmap)
+        plt.show()
+        # kernel_conf = np.max(np.max(heatmaps, axis=0) - np.min(heatmaps, axis=0))
+        # print(kernel_conf)
+    heatmap = np.mean(heatmaps, axis=0)
+        # plt.imshow(heatmap)
+        # plt.show()
     output = []
+    if len(groups) > 0:
+        # heatmap = np.max(heatmaps, axis=0)
+        plt.imshow(heatmap)
+        plt.show()
+        heatmap = postprocessing.threshold_convolved_image(heatmap, 0.85, mode='down')
+        groups, _, _ = postprocessing.group_pixels(heatmap)
+        _, _, output = postprocessing.groups_to_bounding_boxes(groups, heatmap)
+
+    import visualize
+    visualize.visualize_image_with_bounding_boxes(img, output)
+    visualize.show()
     '''
     END YOUR CODE
     '''
-    #
-    # for i in range(len(output)):
-    #     assert len(output[i]) == 5
-    #     assert (output[i][4] >= 0.0) and (output[i][4] <= 1.0)
-    #
-    # return output
+
+    for i in range(len(output)):
+        assert len(output[i]) == 5
+        assert (output[i][4] >= 0.0) and (output[i][4] <= 1.0)
+
+    return output
 
 # Note that you are not allowed to use test data for training.
 # set the path to the downloaded data:
-data_path = '../data/RedLights2011_tiny'
+data_path = '../data/RedLights2011_Medium'
 
 # load splits: 
 split_path = '../data/hw02_splits'
@@ -295,18 +279,19 @@ done_tweaking = False
 Make predictions on the training set.
 '''
 preds_train = {}
+# print(file_names_train)
 for i in range(len(file_names_train)):
-    if i not in [3]:
+    if i not in [4]:
         continue
 
     print(file_names_train[i])
     # read image using PIL:
-    I = Image.open(os.path.join(data_path,file_names_train[i]))
+    img = Image.open(os.path.join(data_path,file_names_train[i]))
 
     # convert to numpy array:
-    I = np.asarray(I)
+    I = np.asarray(img)
 
-    preds_train[file_names_train[i]] = detect_red_light_mf(I, file_names_train[i])
+    preds_train[file_names_train[i]] = detect_red_light_mf(I, img, file_names_train[i])
 
 # save preds (overwrites any previous predictions!)
 with open(os.path.join(preds_path,'preds_train.json'),'w') as f:

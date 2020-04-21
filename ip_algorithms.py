@@ -191,6 +191,7 @@ def neighbor_max_smooth_heatmap(heatmap, kernel):
 
     return heatmap
 
+
 def smooth_heatmaps(heatmaps, kernel):
 
     heatmaps_out = []
@@ -199,3 +200,5 @@ def smooth_heatmaps(heatmaps, kernel):
         heatmaps_out.append(smooth_heatmap(heatmap, kernel))
 
     return heatmaps_out
+
+
