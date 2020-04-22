@@ -9,7 +9,7 @@ import postprocessing
 import ip_algorithms as ipa
 
 
-def compute_convolution(I, T, stride=None, pixel_group=None, img_name=''):
+def compute_convolution(I, T, stride=(None, None), pixel_group=None, img_name=''):
     '''
     This function takes an image <I> and a template <T> (both numpy arrays) 
     and returns a heatmap where each grid represents the output produced by 
@@ -25,6 +25,8 @@ def compute_convolution(I, T, stride=None, pixel_group=None, img_name=''):
 
     if np.max(I) > 1:
         I = I/255
+
+    I = I - np.mean(I, axis=(0, 1))
 
     if len(I.shape) != 3:
         I = np.expand_dims(I, axis=2)
@@ -64,11 +66,11 @@ def compute_convolution(I, T, stride=None, pixel_group=None, img_name=''):
     # rc_Tcols = Tcols - lc_Tcols
     heatmap = np.zeros(shape=(n_rows, n_cols))
 
-    if stride is None:
-        stride = 1
+    if stride is (None, None):
+        stride = (1, 1)
 
-    xvals = range(0, n_rows, stride)
-    yvals = range(0, n_cols, stride)
+    xvals = range(0, n_rows, stride[0])
+    yvals = range(0, n_cols, stride[1])
     targeted = False
     yvals_master = None
     if pixel_group is not None:
@@ -190,61 +192,90 @@ def detect_red_light_mf(I, img=None, name=''):
     import time
     import pickle as pkl
     # You may use multiple stages and combine the results
-    num_kernels = 6
     kernel_list = []
     kernel_sizes = []
-    for i in range(6):
+    exclude = [3, 5, 7, 13, 15, 17]
+    n_kernels = 6 * 3
+    for i in range(n_kernels):
+        if i in exclude:
+            continue
         kernel_list.append(utilities.load_kernel(str(i), '../data/kernels/'))
-        # plt.imshow(kernel_list[-1])
-        # plt.show()
         kernel_sizes.append(preprocessing.get_patch_hot_spot_size(kernel_list[-1]))
     rgb_pixel_array = np.load('../data/red_light_pixels/rgb_pixel_array.npy')
 
-    map_mih = preprocessing.color_match_red_lights(I, rgb_pixel_array, stride=2)
+    map_mih = preprocessing.color_match_red_lights(I, rgb_pixel_array, stride=(1, 2))
     thresholded_mih_map = postprocessing.threshold_convolved_image(map_mih, 0.94, mode='down')
     smoothed_thresholded_mih_map = ipa.neighbor_max_smooth_heatmap(thresholded_mih_map, np.zeros(shape=(5, 5)))
-    # plt.subplot(121)
-    # plt.imshow(I)
-    # plt.subplot(122)
-    # plt.imshow(map_mih)
-    # plt.show()
+    groups1, group_centers1, pixels = postprocessing.group_pixels(smoothed_thresholded_mih_map)
 
-    # plt.subplot(121)
-    # plt.imshow(thresholded_mih_map)
-    # plt.subplot(122)
-    # plt.imshow(smoothed_thresholded_mih_map)
-    # plt.show()
-    groups, group_centers, pixels = postprocessing.group_pixels(smoothed_thresholded_mih_map)
-    kernel_inds = postprocessing.match_group_to_kernel(groups, kernel_sizes)
-
-    heatmap = np.zeros(shape=map_mih.shape)
     heatmaps = []
-
-    for kernel in kernel_list:
+    group_kernel_scores = np.zeros(shape=(len(kernel_list), len(groups1)))
+    plt.subplot(121)
+    plt.imshow(smoothed_thresholded_mih_map)
+    plt.subplot(122)
+    plt.imshow(img)
+    plt.show()
+    exclude_group = []
+    for k, kernel in enumerate(kernel_list):
         kernel_heatmaps = []
-        for i, group in enumerate(groups):
-            # kernel = kernel_list[kernel_inds[i]]
-            group = postprocessing.group_center_to_pixel_group(group_centers[i], kernel, img_size=I.shape)
-            hmap = compute_convolution(I, kernel, stride=1, pixel_group=group)
+        #print('new kernel')
+        #print(len(groups1))
+        for i, group in enumerate(groups1):
+            if i in exclude_group:
+                continue
+            group = postprocessing.group_center_to_pixel_group(group_centers1[i], group, kernel, img_size=I.shape)
+            # print(len(group))
+            hmap = compute_convolution(I, kernel, stride=(1, 1), pixel_group=group)
             kernel_heatmaps.append(hmap)
-            # plt.imshow(heatmaps[-1])
-            # plt.show()
+            group_kernel_scores[k, i] = np.max(hmap)
+            vis = False
+            if (282, 478) in group and vis:
+                plt.subplot(131)
+                plt.imshow(hmap)
+                plt.subplot(132)
+                mask = np.copy(hmap)
+                mask[mask > 0] = 1
+                mask[mask < np.mean(mask)] = 0.25
+                plt.imshow(I/255 * mask[:, :, None])
+                plt.subplot(133)
+                plt.imshow(kernel)
+                plt.show()
+
         kernel_heatmap = np.max(kernel_heatmaps, axis=0)
-        plt.imshow(kernel_heatmap)
-        plt.show()
-        # kernel_conf = np.max(np.max(heatmaps, axis=0) - np.min(heatmaps, axis=0))
-        # print(kernel_conf)
-    heatmap = np.mean(heatmaps, axis=0)
-        # plt.imshow(heatmap)
-        # plt.show()
+        heatmaps.append(kernel_heatmap)
+    heatmap = np.max(heatmaps, axis=0)
+
+    # plt.subplot(131)
+    # plt.imshow(heatmap)
+    # plt.subplot(132)
+    # plt.imshow(avg_heatmap)
+    # plt.subplot(133)
+    # plt.imshow(img)
+    # plt.show()
+
     output = []
-    if len(groups) > 0:
-        # heatmap = np.max(heatmaps, axis=0)
-        plt.imshow(heatmap)
+    if len(groups1) > 0:
+        thresh_heatmap = postprocessing.threshold_convolved_image(heatmap, 0.83, mode='down')
+        groups, group_centers, _ = postprocessing.group_pixels(thresh_heatmap)
+        matched_indices = postprocessing.match_group_centers_to_groups(group_centers, groups1)
+        bb_heatmap = np.zeros(shape=heatmap.shape)
+        # plt.subplot(121)
+        # plt.imshow(thresh_heatmap)
+        # plt.subplot(122)
+        # plt.imshow(img)
         plt.show()
-        heatmap = postprocessing.threshold_convolved_image(heatmap, 0.85, mode='down')
-        groups, _, _ = postprocessing.group_pixels(heatmap)
-        _, _, output = postprocessing.groups_to_bounding_boxes(groups, heatmap)
+        cmc_list = []
+        for i, ind in enumerate(matched_indices):
+            if ind != -1:
+                gc = group_centers[i]
+                kind = int(np.argmax(group_kernel_scores[:, ind]))
+                kernel = kernel_list[kind]
+                cmc = postprocessing.color_match_score(gc, kernel, I)
+                cmc_list.append(cmc)
+                if cmc > 0.88:
+                    postprocessing.add_kernel_patch(gc, kernel, heatmap, bb_heatmap)
+        groups, _, _ = postprocessing.group_pixels(bb_heatmap)
+        _, _, output = postprocessing.groups_to_bounding_boxes(groups, cmc_list, bb_heatmap)
 
     import visualize
     visualize.visualize_image_with_bounding_boxes(img, output)
@@ -281,7 +312,7 @@ Make predictions on the training set.
 preds_train = {}
 # print(file_names_train)
 for i in range(len(file_names_train)):
-    if i not in [4]:
+    if i not in [7, 8, 9, 10, 11, 12]:
         continue
 
     print(file_names_train[i])

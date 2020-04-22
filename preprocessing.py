@@ -3,7 +3,7 @@ import postprocessing
 import matplotlib.pyplot as plt
 
 
-def color_match_red_lights(I, rgb_pixels, stride=1):
+def color_match_red_lights(I, rgb_pixels, stride=(1, 1)):
 
     if np.max(I) > 1:
         I = I/255
@@ -14,8 +14,8 @@ def color_match_red_lights(I, rgb_pixels, stride=1):
     (n_rows, n_cols, n_channels) = np.shape(I)
 
     pixel_distance = np.zeros(shape=(n_rows, n_cols))
-    for i in range(0, n_rows, stride):
-        for j in range(0, n_cols, stride):
+    for i in range(0, n_rows, stride[0]):
+        for j in range(0, n_cols, stride[1]):
             score = np.max(1 - np.mean(abs(rgb_pixels - I[i, j, :]), axis=1))
             pixel_distance[i, j] = score
 

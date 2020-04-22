@@ -52,8 +52,8 @@ def file_modification_time(path):
     return os.path.getmtime(path)
 
 
-def generate_gaussian_kernel(s=3, sigma=1.0):
-    x, y = np.meshgrid(np.linspace(-1, 1, s), np.linspace(-1, 1, s))
+def generate_gaussian_kernel(s=(3, 3), sigma=1.0):
+    x, y = np.meshgrid(np.linspace(-1, 1, s[1]), np.linspace(-1, 1, s[0]))
     d = np.sqrt(x * x + y * y)
     mu = 0.0
     g = np.exp(-((d - mu) ** 2 / (2.0 * sigma ** 2)))

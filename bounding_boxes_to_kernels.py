@@ -109,8 +109,16 @@ for i in range(shape_clusters.shape[0]):
 clustered_kernels = cluster_kernels(kernel_info_list, shape_clusters)
 
 avg_kernels = []
+sub_cluster_size = 3
 for cluster_key in clustered_kernels.keys():
-    avg_kernels.append(np.mean(clustered_kernels[cluster_key], axis=0))
+    print(cluster_key)
+    km3 = KMeans(n_clusters=sub_cluster_size)
+    kernels = clustered_kernels[cluster_key]
+    kshape = (kernels[0].shape[0], kernels[0].shape[1])
+    km3.fit(np.array(kernels).reshape((len(kernels), -1)))
+    sub_ck = km3.cluster_centers_.reshape(sub_cluster_size, kshape[0], kshape[1], 3)
+    avg_kernels.extend(list(sub_ck))
+    # avg_kernels.append(np.mean(clustered_kernels[cluster_key], axis=0))
 
 
 save_path_kernels = '../data/kernels/'
