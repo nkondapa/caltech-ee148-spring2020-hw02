@@ -56,10 +56,10 @@ def compute_iou(box_1, box_2):
 
 def compute_counts(preds, gts, iou_thr=0.5, conf_thr=0.5):
     '''
-    This function takes a pair of dictionaries (with our JSON format; see ex.) 
+    This function takes a pair of dictionaries (with our JSON format; see ex.)
     corresponding to predicted and ground truth bounding boxes for a collection
     of images and returns the number of true positives, false positives, and
-    false negatives. 
+    false negatives.
     <preds> is a dictionary containing predicted bounding boxes and confidence
     scores for a collection of images.
     <gts> is a dictionary containing ground truth bounding boxes for a
@@ -99,7 +99,7 @@ def compute_counts(preds, gts, iou_thr=0.5, conf_thr=0.5):
             FN += 0
             continue
 
-        print(pred_file)
+        # print(pred_file)
         #print(gt)
         for i in range(len(gt)):
             for j in range(len(pred)):
@@ -113,7 +113,7 @@ def compute_counts(preds, gts, iou_thr=0.5, conf_thr=0.5):
                     iou_matrix[i, j] = iou
 
         cTP = 0
-        print(available_points)
+        # print(available_points)
         while np.sum(iou_matrix) != 0:
             for i in range(iou_matrix.shape[0]):
                 if np.sum(iou_matrix[i, :]) == 0:
@@ -139,8 +139,11 @@ def compute_counts(preds, gts, iou_thr=0.5, conf_thr=0.5):
     return TP, FP, FN
 
 # set a path for predictions and annotations:
-preds_path = '../data/hw02_preds'
+pred_name = 'hw02_weakened_preds'
+#pred_name = 'hw02_preds'
+preds_path = '../data/' + pred_name
 gts_path = '../data/hw02_annotations'
+save_path = '../data/output_figures'
 
 # load splits:
 split_path = '../data/hw02_splits'
@@ -148,7 +151,7 @@ file_names_train = np.load(os.path.join(split_path,'file_names_train.npy'))
 file_names_test = np.load(os.path.join(split_path,'file_names_test.npy'))
 
 # Set this parameter to True when you're done with algorithm development:
-done_tweaking = False
+done_tweaking = True
 
 '''
 Load training data.
@@ -178,7 +181,7 @@ if done_tweaking:
 # using (ascending) list of confidence scores as thresholds
 pred_list = []
 for fname in preds_train:
-    print(preds_train[fname])
+    # print(preds_train[fname])
     if not preds_train[fname]:
         continue
     pred_list.append(np.array(preds_train[fname], dtype=float)[:, 4])
@@ -188,26 +191,47 @@ reduced_confidence_thrs = np.unique(np.around(confidence_thrs, decimals=5))
 tp_train = np.zeros(len(confidence_thrs))
 fp_train = np.zeros(len(confidence_thrs))
 fn_train = np.zeros(len(confidence_thrs))
+tp_test = np.zeros(len(confidence_thrs))
+fp_test = np.zeros(len(confidence_thrs))
+fn_test = np.zeros(len(confidence_thrs))
+iou_thr = 0.75
 for i, conf_thr in enumerate(reduced_confidence_thrs):
-    tp_train[i], fp_train[i], fn_train[i] = compute_counts(preds_train, gts_train, iou_thr=0.5, conf_thr=conf_thr)
+    tp_train[i], fp_train[i], fn_train[i] = compute_counts(preds_train, gts_train, iou_thr=iou_thr, conf_thr=conf_thr)
+    tp_test[i], fp_test[i], fn_test[i] = compute_counts(preds_test, gts_test, iou_thr=iou_thr, conf_thr=conf_thr)
+    # tp_train[i], fp_train[i], fn_train[i] = compute_counts(preds_train, gts_train, iou_thr=0.5, conf_thr=conf_thr)
     # break
 # Plot training set PR curves
 
 precision_train = np.zeros(len(confidence_thrs))
 recall_train = np.zeros(len(confidence_thrs))
-
+precision_test = np.zeros(len(confidence_thrs))
+recall_test = np.zeros(len(confidence_thrs))
 for i in range(len(confidence_thrs)):
+    if fn_train[i] == 0:
+        print(i, confidence_thrs[i], tp_train[i], fp_train[i], fn_train[i])
     precision_train[i] = tp_train[i] / (tp_train[i] + fp_train[i])
     recall_train[i] = tp_train[i] / (tp_train[i] + fn_train[i])
+    precision_test[i] = tp_test[i] / (tp_test[i] + fp_test[i])
+    recall_test[i] = tp_test[i] / (tp_test[i] + fn_test[i])
 
-print(recall_train)
-print(precision_train)
+# print(recall_train)
+# print(precision_train)
+plt.figure()
 plt.plot(recall_train, precision_train, '-o')
 plt.xlabel('recall')
 plt.ylabel('precision')
-plt.xlim([0, 1])
-plt.ylim([0, 1])
-plt.show()
+# plt.title('Precision-Recall Train | IOU = ' + str(iou_thr))
+# plt.savefig(os.path.join(save_path, pred_name + '_test_train_iou=' + str(iou_thr) + '.png'))
 
 if done_tweaking:
+    pass
     print('Code for plotting test set PR curves.')
+    plt.plot(recall_test, precision_test, '-o')
+    plt.xlabel('recall')
+    plt.ylabel('precision')
+    plt.title('Weakened Precision-Recall Curves | IoU = ' + str(iou_thr))
+    plt.legend(['train', 'test'])
+    # plt.ylim([0, 1])
+    # plt.xlim([0, 0.4])
+    plt.savefig(os.path.join(save_path, pred_name + '_test_train_iou=' + str(iou_thr) + '.png'))
+

@@ -7,14 +7,15 @@ import utilities
 def threshold_convolved_image(img_arr_orig, threshold, mode='both'):
 
     img_arr = np.copy(img_arr_orig)
-
+    img_arr[np.isnan(img_arr)] = 0
     if mode == 'both':
         img_arr[img_arr < threshold] = 0
         img_arr[img_arr > threshold] = 1
     elif mode == 'up':
         img_arr[img_arr > threshold] = 1
     elif mode == 'down':
-        img_arr[img_arr < threshold] = 0
+        if np.sum(img_arr < threshold) != 0:
+            img_arr[img_arr < threshold] = 0
 
     return img_arr
 
@@ -39,10 +40,16 @@ def rank_threshold_convolved_image(img_arr_orig, rank=20, mode='both'):
 
 def group_pixels(img_arr):
 
-    x, y = np.where(img_arr > 0)
+    groups = []
+    group_centers = []
+    points_to_pass = None
+    if np.sum(img_arr > 0) != 0:
+        x, y = np.where(img_arr > 0)
+        points = set(zip(x, y))
+        points_to_pass = set(zip(x, y))
+    else:
+        return groups, group_centers, points_to_pass
 
-    points = set(zip(x, y))
-    points_to_pass = set(zip(x, y))
     bfs = deque()
     groups = []
     group_centers = []
@@ -98,9 +105,12 @@ def groups_to_bounding_boxes(groups, color_match_score_list, img_arr=None):
                 most_bottom = p[0]
             heat_sum += img_arr[p]
         score = heat_sum / len(group)
-        score = (score + color_match_score_list[i]) / 2
+
+        if 0 <= i < len(color_match_score_list):
+            score = (score + max(0, color_match_score_list[i])) / 2
+
         scores.append(score)
-        print(most_top, most_left, most_bottom, most_right, score)
+        # print(most_top, most_left, most_bottom, most_right, score)
         bounding_box = [int(most_top), int(most_left), int(most_bottom), int(most_right)]
         bounding_boxes.append(bounding_box)
         combined.append([int(most_top), int(most_left), int(most_bottom), int(most_right), score])
@@ -136,21 +146,11 @@ def group_center_to_pixel_group(group_center, group, T, img_size):
 
     if len(T.shape) == 2 and n_channels != 1:
         (Trows, Tcols) = np.shape(T)
-        T = np.expand_dims(T, axis=2)
-        repT = np.tile(T, reps=3)
     elif len(T.shape) == 3 and n_channels == 1:
         T = np.mean(T, axis=2)
         (Trows, Tcols) = np.shape(T)
-        repT = T
     else:
         (Trows, Tcols, Tchannels) = np.shape(T)
-        repT = T
-
-    T_norm = (1 / np.linalg.norm(repT.flatten()))
-    avg_repT = np.mean(repT, axis=2)
-    x, y = np.where(repT[:, :, 0] == np.max(repT[:, :, 0]))
-    hot_x = round(np.mean(x).item())
-    hot_y = round(np.mean(y).item())
 
     tr_Trows = int(Trows/2)
     br_Trows = Trows - tr_Trows
@@ -161,8 +161,6 @@ def group_center_to_pixel_group(group_center, group, T, img_size):
     br = min(n_rows, group_center[0] + br_Trows)
     lc = max(0, group_center[1] - lc_Tcols)
     rc = min(n_cols, group_center[1] + rc_Tcols)
-    offsetr = abs(group_center[0] - tr_Trows - tr) + abs(group_center[0] + br_Trows - br)
-    offsetc = abs(group_center[1] - lc_Tcols - lc) + abs(group_center[1] + rc_Tcols - rc)
 
     pixel_group = group
     for i in range(tr, br+1):
@@ -269,13 +267,5 @@ def color_match_score(gc, kernel, img):
     scores = np.sum(n_patch * n_kernel, axis=2)
     gk = utilities.generate_gaussian_kernel(s=patch.shape, sigma=1)
     score = np.sum(gk * scores)
-    print(score)
+    # print(score)
     return score
-    # print(scores.shape)
-    # plt.subplot(131)
-    # plt.imshow(scores)
-    # plt.subplot(132)
-    # plt.imshow(patch)
-    # plt.subplot(133)
-    # plt.imshow(kernel)
-    # plt.show()

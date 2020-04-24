@@ -48,7 +48,7 @@ def visualize_all_images_with_bounding_boxes(image_base_path=None, prediction_pa
         prediction_path = '../data/hw02_preds/preds_train.json'
 
     if image_base_path is None:
-        image_base_path = '../data/RedLights2011_tiny'
+        image_base_path = '../data/RedLights2011_Medium'
 
     with open(prediction_path, 'r') as f:
         predictions_dict = json.load(f)
@@ -80,9 +80,8 @@ def save_image_with_bounding_boxes(img, predictions, save_path):
     draw = ImageDraw.Draw(img)
 
     for p in predictions:
-        bb = p[:-1]
-
-        draw.rectangle(bb)
+        bb = p[:4]
+        draw.rectangle([bb[1], bb[0], bb[3], bb[2]])
 
     img.save(save_path)
 

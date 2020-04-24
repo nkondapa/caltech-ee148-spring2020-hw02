@@ -3,8 +3,8 @@ import os
 import json
 
 
-viz.visualize_all_images_with_bounding_boxes()
+annotation_path = '../data/hw02_preds'
+savepath = '../data/annotated_images/'
 
-
-gts_path = '../data/hw02_annotations'
-viz.visualize_all_images_with_bounding_boxes(prediction_path=os.path.join(gts_path, 'annotations_train.json'))
+viz.visualize_all_images_with_bounding_boxes(prediction_path=os.path.join(annotation_path, 'preds_train.json'),
+                                             save_path=savepath)
